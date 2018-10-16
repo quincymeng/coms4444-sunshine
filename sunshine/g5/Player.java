@@ -2,391 +2,298 @@ package sunshine.g5;
 
 import java.util.List;
 import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.Random;
 import java.util.HashMap;
-import java.lang.Math.*;
-import java.util.*;
-
-
+import java.lang.Math;
 import sunshine.sim.Command;
 import sunshine.sim.Tractor;
 import sunshine.sim.Trailer;
 import sunshine.sim.CommandType;
 import sunshine.sim.Point;
-
+import java.util.PriorityQueue;
 
 public class Player implements sunshine.sim.Player {
     // Random seed of 42.
     private int seed = 42;
     private Random rand;
-    
+    int CollectBales;
+    int CarNum;
+    double length;
+    double range;
+    int layers;
     List<Point> bales;
-    List<Point> bales_load;
-    List<Trailer> trailers;
-    Hashtable attach_status;
+    List<Point> remainingBales;
+    List<Double> degres;
+    int[] balesdist;
+    int[] CarDist;
+    int[] CarRDist;
+    MutableTrailer[] tlist;
+    int outRangeSize;
+    int threshHold;
+    int outRangeSize2;
+    int start;
+    int Stcount;
+    Map<Integer, List<Integer>> map;
+    private static class MutableTrailer implements Trailer
+    {
+        public Point location;
+        public int numBales;
 
+        public MutableTrailer()
+        {
+            this.location = new Point(0, 0);
+            this.numBales = 0;
+        }
+
+        public Point getLocation()
+        {
+            return new Point(location.x, location.y);
+        }
+
+        public int getNumBales()
+        {
+            return numBales;
+        }
+    }
     public Player() {
         rand = new Random(seed);
     }
-    
+
+    public Point getClosestBale(Tractor tractor, Point farthest)
+    {
+    	Point closest = new Point(Float.MAX_VALUE, Float.MAX_VALUE);
+        for (Point c : bales) {
+
+    		if(remainingBales.contains(c) == false)
+    			continue;
+
+            if (calDistance(farthest, c) < calDistance(farthest, closest)){
+                closest = c;
+            }
+        }
+
+        if(remainingBales.contains(closest))
+        {
+	        remainingBales.remove(closest);
+	        return closest;
+        }
+        else
+        	return new Point(0, 0);
+    }
+
+    public Point getFarthestBale(Tractor tractor)
+    {
+    	double max_dist = Float.MIN_VALUE;
+    	Point farthest = new Point(0, 0);
+
+    	for(Point p:bales)
+    	{
+    		if(remainingBales.contains(p) == false)
+    			continue;
+
+    		if(calDistance(p) > max_dist)
+    		{
+    			farthest = p;
+    			max_dist = calDistance(p);
+    		}
+    	}
+    	remainingBales.remove(farthest);
+
+    	Point rem1 = new Point(0, 0);
+    	Point rem2 = new Point(0, 0);
+    	for(int i=0; i<9; i++)
+    	{
+    		Point temp = getClosestBale(tractor, farthest);
+    		if(i == 4 && temp.x != -1)
+    			rem1 = temp;
+    		if(i == 5 && temp.x != -1)
+    			rem2 = temp;
+    	}
+
+    	Point final_pos = new Point((rem1.x+rem2.x)/2, (rem1.y+rem2.y)/2);
+    	return final_pos;
+    }
+
     public void init(List<Point> bales, int n, double m, double t)
     {
+    	if(bales.size()/10 > n*10)
+    		threshHold = bales.size()/10;
+    	else
+    		threshHold = n*10;
+
+        range = 320.0;
+        Stcount = 1;
+        CarNum  = n ;
+        tlist = new MutableTrailer[CarNum];
+
+        for(int i=0;i<CarNum ;i++){
+            tlist[i] = new MutableTrailer();
+        }
+
+        remainingBales = new ArrayList<>();
+        for(Point p: bales){
+        	remainingBales.add(p);
+        }
+
+        map = new HashMap<>();
         this.bales = bales;
-        bales_load = new ArrayList<Point>(bales);
-        trailers = new ArrayList<Trailer>();
-        attach_status = new Hashtable();
     }
 
-
-
-    private Point closest_bale(Tractor tractor) {
-        Point trac_loc = tractor.getLocation();
-        Point bale = null;
-        double min_dist = Double.POSITIVE_INFINITY;
-
-        for (Point x : bales) {
-            double cur_dist = Math.sqrt(Math.pow(trac_loc.x - x.x, 2) + Math.pow(trac_loc.y - x.y, 2));
-            if (cur_dist < min_dist) {
-                min_dist = cur_dist;
-                bale = x;
-            }
-        }
-        return bale;
-    }
-    private Point closest_bale_load(Tractor tractor) {
-        Point trac_loc = tractor.getLocation();
-        Point bale = null;
-        double min_dist = Double.POSITIVE_INFINITY;
-
-        for (Point x : bales_load) {
-            double cur_dist = Math.sqrt(Math.pow(trac_loc.x - x.x, 2) + Math.pow(trac_loc.y - x.y, 2));
-            if (cur_dist < min_dist) {
-                min_dist = cur_dist;
-                bale = x;
-            }
-        }
-        return bale;
+    //cal dist bw 2 pts
+    private double calDistance(Point p1, Point p2){
+      	return Math.sqrt((p1.x - p2.x)*(p1.x - p2.x) + (p1.y - p2.y)*(p1.y - p2.y));
     }
 
-
-
-
-    private Point target_from_origin_bale() {
-        Point origin = new Point(0.0, 0.0);
-        Point bale = null;
-        double max_dist = Double.NEGATIVE_INFINITY;
-
-        for (Point x : bales) {
-            double cur_dist = Math.sqrt(Math.pow(origin.x - x.x, 2) + Math.pow(origin.y - x.y, 2));
-            if (cur_dist > max_dist) {
-                max_dist = cur_dist;
-                bale = x;
-            }
-        }
-
-        Point new_bale = new Point(bale.x - 20, bale.y - 20);
-
-        return new_bale;
+    private double calDistance(Point p){
+        return Math.sqrt(p.x*p.x + p.y*p.y);
     }
-
-
-
-
-    private double dist_calc(Tractor tractor, Point dest) {
-        Point trac_loc = tractor.getLocation();
-        return Math.sqrt(Math.pow(trac_loc.x - dest.x, 2) + Math.pow(trac_loc.y - dest.y, 2));
-    }
-
-
-
-
-    private double time_without_trailer(Tractor tractor, Point bale) {
-        Point trac_loc = tractor.getLocation();
-        double distance = Math.sqrt(Math.pow(trac_loc.x - bale.x, 2) + Math.pow(trac_loc.y - bale.y, 2));
-        double time = (2 * distance / 10) + 20;
-        return time;
-    }
-    private double time_without_trailer(Point tractor, Point bale) {
-        Point trac_loc = tractor;
-        double distance = Math.sqrt(Math.pow(trac_loc.x - bale.x, 2) + Math.pow(trac_loc.y - bale.y, 2));
-        double time = (2 * distance / 10) + 20;
-        return time;
-    }
-
-
-
-
-    private double time_with_trailer(Tractor tractor, Point bale) {
-        Point trac_loc = tractor.getLocation();
-        double distance = Math.sqrt(Math.pow(trac_loc.x - bale.x, 2) + Math.pow(trac_loc.y - bale.y, 2));
-        double time = ((2 * distance / 4) + 240) / 10 + 40; /* assume each trailer is full each trip */
-        return time;
-    }
-    private double time_with_trailer(Point tractor, Point bale) {
-        Point trac_loc = tractor;
-        double distance = Math.sqrt(Math.pow(trac_loc.x - bale.x, 2) + Math.pow(trac_loc.y - bale.y, 2));
-        double time = ((2 * distance / 4) + 240) / 10 + 40; /* assume each trailer is full each trip */
-        return time;
-    }
-    
-
-
-    private boolean trailers_to_be_unstacked_at_origin() {
-        boolean result = false;
-        for (Trailer x : trailers) {
-            if (x.getNumBales() > 0 && x.getLocation().equals(new Point(0.0, 0.0))) {
-                result = true;
-                break;
-            }
-        }
-        return result;
-    }
-
-
-
-
-    private Trailer closest_trailer(Tractor tractor) {
-        Point trac_loc = tractor.getLocation();
-
-        Trailer closest = null;
-        double closest_dist = Double.NEGATIVE_INFINITY;
-        for (Trailer x : trailers) {
-            //System.err.println(x.getLocation().x + x.getLocation().y);
-            if (x.getLocation().equals(new Point(0.0, 0.0))) {
-                continue;
-            }
-
-            double cur_dist = Math.sqrt(Math.pow(trac_loc.x - x.getLocation().x, 2) + Math.pow(trac_loc.y - x.getLocation().y, 2));
-            if (cur_dist < closest_dist) {
-                closest = x;
-                closest_dist = cur_dist;
-                
-            }
-        }
-        //System.err.println(closest == null);
-        return closest;
-    }
-    private Trailer closest_trailer(Tractor tractor, ArrayList<Trailer> trailers) {
-        Point trac_loc = tractor.getLocation();
-
-        Trailer closest = null;
-        double closest_dist = Double.NEGATIVE_INFINITY;
-        for (Trailer x : trailers) {
-            //System.err.println(x.getLocation().x + x.getLocation().y);
-            System.err.println("HEYYYYYYYY TRAILER FUNCTION\n" + x.getLocation().x + x.getLocation().y);
-            if (x.getLocation().equals(new Point(0.0, 0.0))) {
-                continue;
-            }
-
-            double cur_dist = Math.sqrt(Math.pow(trac_loc.x - x.getLocation().x, 2) + Math.pow(trac_loc.y - x.getLocation().y, 2));
-            if (cur_dist < closest_dist) {
-                closest = x;
-                closest_dist = cur_dist;  
-            }
-        }
-        //System.err.println(closest == null);
-        return closest;
-    }
-
-
-
-
-    private Trailer get_trailer_at_loc(Tractor tractor) {
-        Point trac_loc = tractor.getLocation();
-        Trailer result = null;
-
-        for (Trailer x : trailers) {
-            if (x.getLocation().equals(trac_loc)) {
-                result = x;
-            }
-        }
-        return result;
-    }
-
-
-
-
-
-
-
 
     public Command getCommand(Tractor tractor)
     {
-        if (tractor.getLocation().equals(new Point(0.0, 0.0))) {
-            //if(tractor.getAttachedTrailer() != null) {return new Command(CommandType.DETATCH);}
-            if (tractor.getAttachedTrailer() != null && !trailers.contains(tractor.getAttachedTrailer())) {
-                trailers.add(tractor.getAttachedTrailer());
-                attach_status.put(tractor.getAttachedTrailer(), 1);
-            }
+    	System.out.println(bales.size());
+    	System.out.println(remainingBales.size());
 
-            /*if (tractor.getAttachedTrailer() != null) {
-                return Command.createMoveCommand(new Point(30.0,30.0));
-            } else {
-                Point trailor_loc = trailers.get(0).getLocation();
-                return Command.createMoveCommand(trailor_loc);
-            }*/
-            
-            if (tractor.getHasBale()) {
-                return new Command(CommandType.UNLOAD);
-            }
 
-            if (trailers_to_be_unstacked_at_origin()) {
-                return new Command(CommandType.UNSTACK);
-            }
+    	//if tractor at origin
+        if(Math.abs(tractor.getLocation().x-0)<1e-2 && Math.abs(tractor.getLocation().y-0)<1e-2){
 
+              if(tractor.getHasBale())  return new Command(CommandType.UNLOAD);
+
+              if(Math.abs(tlist[tractor.getId()].getLocation().x-0)<0.001 && Math.abs(tlist[tractor.getId()].getLocation().y-0)<0.001 && tlist[tractor.getId()].getNumBales()>0){
+                  tlist[tractor.getId()].numBales = tlist[tractor.getId()].numBales-1;
+                  return new Command(CommandType.UNSTACK);
+              }
+
+
+		    	if(bales.size() == 0)
+		    	{
+		    		return new Command(CommandType.UNSTACK);
+		    	}
+
+
+                  if(bales.size()<threshHold){
+
+                  		for(int i=0; i<CarNum; i++)
+                  			tlist[i].location = new Point(0, 0);
+
+                      if(tractor.getAttachedTrailer()!=null){
+
+                          return new Command(CommandType.DETATCH);
+
+                      }else{
+                          Point p = bales.get(0);			//change this to closest bale
+                          bales.remove(bales.get(0));	//remove that
+                          return Command.createMoveCommand(p);
+                      }
+
+                  }
+
+
+              //if bales on farm
+              if(bales.size() > 0){
+                  if(tractor.getAttachedTrailer()!=null){
+                      if(tractor.getAttachedTrailer().getNumBales()==0){
+		              	  Point temp = getFarthestBale(tractor);
+		                  tlist[tractor.getId()].location = temp;
+                          return Command.createMoveCommand(temp);		//move to trailer
+
+                      }else{
+                          tlist[tractor.getId()].location = new Point(0, 0);
+                          return new Command(CommandType.DETATCH);
+                      }
+                  }else{
+                      return new Command(CommandType.ATTACH);
+                  }
+
+              }else{
+              	
+                
+
+                  // if(tractor.getAttachedTrailer()!=null){
+                  //     if(tractor.getAttachedTrailer().getNumBales()==0){
+                  //         //Point p = tlist[tractor.getId()].location;
+                  //         //return Command.createMoveCommand(p);		//move to tractor
+                  //     }else{
+
+                           tlist[tractor.getId()].location.x = 0;
+                           tlist[tractor.getId()].location.y = 0;
+                           return new Command(CommandType.DETATCH);
+                  //     }
+                  // }
+                  // else{
+                  // 		return Command.createMoveCommand(new Point(0, 0));
+                  // }
+              }
+
+        }
+
+        //tractor near trailer not at origin
+        if(Math.abs(tractor.getLocation().x-tlist[tractor.getId()].location.x)<0.003 && Math.abs(tractor.getLocation().y-tlist[tractor.getId()].location.y)<0.003) {
+        	System.out.println("HEREHEREHEREHEREHEREHEREHEREHEER");
             if (tractor.getAttachedTrailer() != null) {
-                if (tractor.getAttachedTrailer().getNumBales() > 0) {
-                    attach_status.put(tractor.getAttachedTrailer(), 0);
-                    return new Command(CommandType.DETATCH);
+                if (tlist[tractor.getId()].getNumBales() == 10 || remainingBales.size() == 0 || bales.size() == 0) {
+                    Point p = new Point(0, 0);
+                    return Command.createMoveCommand(p);		//move to origin
+
                 }
-            }
 
-            /* send tractor out onto field */
-            Point dest_bale = target_from_origin_bale();
-            
-
-            if(time_with_trailer(tractor, dest_bale) < 1000000) {// time_without_trailer(tractor, dest_bale)) {
-                if (tractor.getAttachedTrailer() == null) {
-                    attach_status.put(get_trailer_at_loc(tractor), 1);
-                    return new Command(CommandType.ATTACH);
-                } else {
-                    bales.remove(dest_bale);
-
-                    return Command.createMoveCommand(dest_bale);
-                }
+                return new Command(CommandType.DETATCH);
             } else {
-                if (tractor.getAttachedTrailer() != null) {
-                    attach_status.put(tractor.getAttachedTrailer(), 0);
-                    return new Command(CommandType.DETATCH);
-                } else {
-                    bales.remove(dest_bale);
-                    return Command.createMoveCommand(dest_bale);
+                if (!tractor.getHasBale()) {
+                    if (tlist[tractor.getId()].getNumBales() == 10 || remainingBales.size() == 0 || bales.size() == 0) {
+                        return new Command(CommandType.ATTACH);
+
+                    } else {
+
+                        double x = tlist[tractor.getId()].location.x;
+                        double y = tlist[tractor.getId()].location.y;
+                        Point tractor_loc = new Point(x, y);
+                        Point closest = new Point(Float.MAX_VALUE, Float.MAX_VALUE);
+
+                    	for(Point p: bales)
+                    	{
+                    		if(calDistance(tractor_loc, p) < calDistance(tractor_loc, closest))
+                    			closest = p;
+                    	}
+
+                    	bales.remove(closest);
+                        return Command.createMoveCommand(closest);	
+                    }
+
+
+                	} else {
+                        	tlist[tractor.getId()].numBales = tlist[tractor.getId()].numBales + 1;
+                        	return new Command(CommandType.STACK);
+
                 }
             }
-
-
-
-             
-                /* send tractor out onto field */
-                //Point dest_bale = closest_bale(tractor);
-                //bales.remove(dest_bale);
-                //return Command.createMoveCommand(dest_bale);
-            
-        } else {
-
-            if (tractor.getAttachedTrailer() != null) {
-                if (tractor.getAttachedTrailer().getNumBales() > 0) {
-                    return Command.createMoveCommand(new Point(0.0,0.0));
+        }
+        
+            /*if (tractor.getLocation().x * tractor.getLocation().x + tractor.getLocation().y * tractor.getLocation().y < range * range) {
+                if (tractor.getHasBale()) {
+                    Point p = new Point(0, 0);
+                    return Command.createMoveCommand(p);		//move to origin
                 } else {
-                    attach_status.put(tractor.getAttachedTrailer(), 0);
-                    return new Command(CommandType.DETATCH);
-                }
-            }
 
-            /* go collect bales */
-            if (tractor.getHasBale() == false) {
-                Point dest_bale = closest_bale(tractor);
-                Point dest_bale_load = closest_bale_load(tractor);
-
-                //System.err.println("HEYYYYYYY");
-                //System.err.println(tractor.getLocation().x + "###" + tractor.getLocation().y + "###" + dest_bale_load.x + "###" + dest_bale_load.y);
-
-                if (!tractor.getLocation().equals(dest_bale_load)) {
-                    bales.remove(dest_bale);
-                    return Command.createMoveCommand(dest_bale);
-                } else {
-                    bales_load.remove(dest_bale_load);
                     return new Command(CommandType.LOAD);
                 }
             } else {
-                //System.err.println("HEYYYYYYYY\n" + trailers.size());
-                Trailer closest_trailer = closest_trailer(tractor);
-                //System.err.println("HEYYYYYYYY\n" + (closest_trailer == null));
-                if (attach_status.get(closest_trailer).equals(1)) {
-                    ArrayList<Trailer> temp = new ArrayList<Trailer>(trailers);
-                    while (attach_status.get(closest_trailer).equals(1)) {
-                        //System.err.println("HEYYYYYYYY\n" + temp.size());
-                        temp.remove(closest_trailer);
-
-                        closest_trailer = closest_trailer(tractor, temp);
-                        System.err.println("HEYYYYYYYY\n" + (closest_trailer == null));
-                    }
-                }
-
-
-                if (closest_trailer == null) {return Command.createMoveCommand(new Point(0.0,0.0));}
-
-                if (!tractor.getLocation().equals(closest_trailer.getLocation())) {
-                    return Command.createMoveCommand(closest_trailer.getLocation());
+            	*/
+                if (tractor.getHasBale()) {
+                    Point p = new Point(tlist[tractor.getId()].location.x, tlist[tractor.getId()].location.y);
+                    return Command.createMoveCommand(p);		//move to trailer
                 } else {
-                    if (attach_status.get(get_trailer_at_loc(tractor)).equals(0) && (closest_trailer.getNumBales() == 10 || bales_load.size() == 0)) {
-                        attach_status.put(get_trailer_at_loc(tractor), 1);
-                        return new Command(CommandType.ATTACH);
-                    } else {
-                        return new Command(CommandType.STACK);
-                    }
+
+                	if(bales.size() == 0)
+                		return Command.createMoveCommand(new Point(0, 0));	 
+
+                    return new Command(CommandType.LOAD);
                 }
-            }
+            //}
 
 
 
-            /*
-            if (tractor.getAttachedTrailer() != null) {
-                return new Command(CommandType.DETATCH);
-            } else {
-                return Command.createMoveCommand(new Point(0.0,0.0));
-            }
-            
-            if (tractor.getHasBale()) {
-                return Command.createMoveCommand(new Point(0.0, 0.0));
-            } else {
-                return new Command(CommandType.LOAD);
-            }*/
-        }
-
-
-        /*
-        if (tractor.getHasBale())
-        {
-            if (tractor.getLocation().equals(new Point(0.0, 0.0)))
-            {
-                return new Command(CommandType.UNLOAD);
-            }
-            else
-            {
-                return Command.createMoveCommand(new Point(0.0, 0.0));
-            }
-        }
-        else
-        {
-            if (tractor.getLocation().equals(new Point(0.0, 0.0)))
-            {
-                if (rand.nextDouble() > 0.5)
-                {
-                    if (tractor.getAttachedTrailer() == null)
-                    {
-                        return new Command(CommandType.ATTACH);
-                    }
-                    else
-                    {
-                        return new Command(CommandType.DETATCH);
-                    }
-                }
-                else if (bales.size() > 0)
-                {
-                    Point p = bales.remove(rand.nextInt(bales.size()));
-                    return Command.createMoveCommand(p);
-                }
-                else
-                {
-                    return null;
-                }
-            }
-            else
-            {
-                return new Command(CommandType.LOAD);
-            }
-        }*/
     }
 }
+
