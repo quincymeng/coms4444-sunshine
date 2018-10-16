@@ -72,7 +72,7 @@ public class Player implements sunshine.sim.Player {
 
 
 
-    private Point far_from_origin_bale() {
+    private Point target_from_origin_bale() {
         Point origin = new Point(0.0, 0.0);
         Point bale = null;
         double max_dist = Double.NEGATIVE_INFINITY;
@@ -84,7 +84,10 @@ public class Player implements sunshine.sim.Player {
                 bale = x;
             }
         }
-        return bale;
+
+        Point new_bale = new Point(bale.x - 20, bale.y - 20);
+
+        return new_bale;
     }
 
 
@@ -147,21 +150,18 @@ public class Player implements sunshine.sim.Player {
         Point trac_loc = tractor.getLocation();
 
         Trailer closest = null;
-        double closest_dist = 0;
+        double closest_dist = Double.NEGATIVE_INFINITY;
         for (Trailer x : trailers) {
             //System.err.println(x.getLocation().x + x.getLocation().y);
             if (x.getLocation().equals(new Point(0.0, 0.0))) {
                 continue;
             }
-            if (closest == null) {
+
+            double cur_dist = Math.sqrt(Math.pow(trac_loc.x - x.getLocation().x, 2) + Math.pow(trac_loc.y - x.getLocation().y, 2));
+            if (cur_dist < closest_dist) {
                 closest = x;
-                closest_dist = Math.sqrt(Math.pow(trac_loc.x - x.getLocation().x, 2) + Math.pow(trac_loc.y - x.getLocation().y, 2));
-            } else {
-                double cur_dist = Math.sqrt(Math.pow(trac_loc.x - x.getLocation().x, 2) + Math.pow(trac_loc.y - x.getLocation().y, 2));
-                if (cur_dist < closest_dist) {
-                    closest = x;
-                    closest_dist = cur_dist;
-                }
+                closest_dist = cur_dist;
+                
             }
         }
         //System.err.println(closest == null);
@@ -171,21 +171,18 @@ public class Player implements sunshine.sim.Player {
         Point trac_loc = tractor.getLocation();
 
         Trailer closest = null;
-        double closest_dist = 0;
+        double closest_dist = Double.NEGATIVE_INFINITY;
         for (Trailer x : trailers) {
             //System.err.println(x.getLocation().x + x.getLocation().y);
+            System.err.println("HEYYYYYYYY TRAILER FUNCTION\n" + x.getLocation().x + x.getLocation().y);
             if (x.getLocation().equals(new Point(0.0, 0.0))) {
                 continue;
             }
-            if (closest == null) {
+
+            double cur_dist = Math.sqrt(Math.pow(trac_loc.x - x.getLocation().x, 2) + Math.pow(trac_loc.y - x.getLocation().y, 2));
+            if (cur_dist < closest_dist) {
                 closest = x;
-                closest_dist = Math.sqrt(Math.pow(trac_loc.x - x.getLocation().x, 2) + Math.pow(trac_loc.y - x.getLocation().y, 2));
-            } else {
-                double cur_dist = Math.sqrt(Math.pow(trac_loc.x - x.getLocation().x, 2) + Math.pow(trac_loc.y - x.getLocation().y, 2));
-                if (cur_dist < closest_dist) {
-                    closest = x;
-                    closest_dist = cur_dist;
-                }
+                closest_dist = cur_dist;  
             }
         }
         //System.err.println(closest == null);
@@ -246,16 +243,16 @@ public class Player implements sunshine.sim.Player {
             }
 
             /* send tractor out onto field */
-            Point dest_bale = far_from_origin_bale();
-            //bales.remove(dest_bale);
-            //return Command.createMoveCommand(dest_bale);
+            Point dest_bale = target_from_origin_bale();
+            
 
-            if(time_with_trailer(tractor, dest_bale) < time_without_trailer(tractor, dest_bale)) {
+            if(time_with_trailer(tractor, dest_bale) < 1000000) {// time_without_trailer(tractor, dest_bale)) {
                 if (tractor.getAttachedTrailer() == null) {
                     attach_status.put(get_trailer_at_loc(tractor), 1);
                     return new Command(CommandType.ATTACH);
                 } else {
                     bales.remove(dest_bale);
+
                     return Command.createMoveCommand(dest_bale);
                 }
             } else {
@@ -303,13 +300,17 @@ public class Player implements sunshine.sim.Player {
                     return new Command(CommandType.LOAD);
                 }
             } else {
-                //System.err.println("HEYYYYYYYY");
+                //System.err.println("HEYYYYYYYY\n" + trailers.size());
                 Trailer closest_trailer = closest_trailer(tractor);
+                //System.err.println("HEYYYYYYYY\n" + (closest_trailer == null));
                 if (attach_status.get(closest_trailer).equals(1)) {
                     ArrayList<Trailer> temp = new ArrayList<Trailer>(trailers);
                     while (attach_status.get(closest_trailer).equals(1)) {
+                        //System.err.println("HEYYYYYYYY\n" + temp.size());
                         temp.remove(closest_trailer);
+
                         closest_trailer = closest_trailer(tractor, temp);
+                        System.err.println("HEYYYYYYYY\n" + (closest_trailer == null));
                     }
                 }
 
